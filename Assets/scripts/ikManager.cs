@@ -1,13 +1,11 @@
 using System;
-using MathNet.Numerics.LinearAlgebra;
-using MathNet.Numerics.LinearAlgebra.Double;
 using UnityEngine;
 
-public class InverseKinematics : MonoBehaviour
+public class ikManager : MonoBehaviour
 {
-    public ForwardKinematics fk; // Reference to the Forward Kinematics script
+    public myfkManager fk; // Reference to the Forward Kinematics script
     public Joints jointsScript;   // Reference to the Joints script
-    public gameObject m_target;     // The moving target position (e.g., the ball)
+    public GameObject m_target;     // The moving target position (e.g., the ball)
 
     private float learningRate = 0.1f; // Learning rate for gradient descent
     private int maxIterations = 100;    // Maximum iterations for convergence
@@ -17,7 +15,7 @@ public class InverseKinematics : MonoBehaviour
     {
         if (fk == null)
         {
-            fk = GetComponent<ForwardKinematics>();
+            fk = GetComponent<myfkManager>();
         }
     }
 
@@ -34,8 +32,7 @@ public class InverseKinematics : MonoBehaviour
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
             // Calculate the current end effector position
-            Matrix<double> T_final = fk.ForwardKinematicsCalculation(jointAngles, jointsScript.GetLinkLengths());
-            Vector3 currentPos = fk.ExtractEndEffectorPosition(T_final);
+            Vector3 currentPos = fk.GetEndEffectorPosition(jointAngles);
             Vector3 targetPos = m_target.transform.position; // Use m_target to get the current position of the moving target
 
             // Calculate the error
@@ -70,22 +67,20 @@ public class InverseKinematics : MonoBehaviour
         for (int i = 0; i < angles.Length; i++)
         {
             // Calculate the original position
-            Matrix<double> originalT = fk.ForwardKinematicsCalculation(angles, jointsScript.GetLinkLengths());
-            Vector3 originalPos = fk.ExtractEndEffectorPosition(originalT);
+            Vector3 originalPos = fk.GetEndEffectorPosition(angles);
 
             // Create a copy of angles and adjust one joint angle
             float[] newAngles = (float[])angles.Clone();
             newAngles[i] += delta;
 
             // Calculate the new position
-            Matrix<double> newT = fk.ForwardKinematicsCalculation(newAngles, jointsScript.GetLinkLengths());
-            Vector3 newPos = fk.ExtractEndEffectorPosition(newT);
+            Vector3 newPos = fk.GetEndEffectorPosition(newAngles);
 
             // Calculate the difference in position
             Vector3 positionChange = newPos - originalPos;
 
             // Compute the gradient as the change in error over the change in joint angle
-            gradients[i] = Vector3.Dot(positionChange, error.normalized) / delta;
+            gradients[i] = Vector3.Dot(positionChange.normalized, error.normalized) / delta;
         }
 
         return gradients;
