@@ -1,9 +1,8 @@
-using System;
 using UnityEngine;
 
 public class ikManager : MonoBehaviour
 {
-    public myfkManager fk; // Reference to the Forward Kinematics script
+    public forkine fk; // Reference to the Forward Kinematics script
     public Joints jointsScript;   // Reference to the Joints script
     public GameObject m_target;     // The moving target position (e.g., the ball)
 
@@ -15,7 +14,7 @@ public class ikManager : MonoBehaviour
     {
         if (fk == null)
         {
-            fk = GetComponent<myfkManager>();
+            fk = GetComponent<forkine>();
         }
     }
 
@@ -32,7 +31,8 @@ public class ikManager : MonoBehaviour
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
             // Calculate the current end effector position
-            Vector3 currentPos = fk.GetEndEffectorPosition(jointAngles);
+            Matrix4x4 T_final = fk.ForwardKinematics(jointAngles, jointsScript.GetLinkLengths());
+            Vector3 currentPos = fk.ExtractEndEffectorPosition(T_final);
             Vector3 targetPos = m_target.transform.position; // Use m_target to get the current position of the moving target
 
             // Calculate the error
@@ -67,20 +67,22 @@ public class ikManager : MonoBehaviour
         for (int i = 0; i < angles.Length; i++)
         {
             // Calculate the original position
-            Vector3 originalPos = fk.GetEndEffectorPosition(angles);
+            Matrix4x4 originalT = fk.ForwardKinematics(angles, jointsScript.GetLinkLengths());
+            Vector3 originalPos = fk.ExtractEndEffectorPosition(originalT);
 
             // Create a copy of angles and adjust one joint angle
             float[] newAngles = (float[])angles.Clone();
             newAngles[i] += delta;
 
             // Calculate the new position
-            Vector3 newPos = fk.GetEndEffectorPosition(newAngles);
+            Matrix4x4 newT = fk.ForwardKinematics(newAngles, jointsScript.GetLinkLengths());
+            Vector3 newPos = fk.ExtractEndEffectorPosition(newT);
 
             // Calculate the difference in position
             Vector3 positionChange = newPos - originalPos;
 
             // Compute the gradient as the change in error over the change in joint angle
-            gradients[i] = Vector3.Dot(positionChange.normalized, error.normalized) / delta;
+            gradients[i] = Vector3.Dot(positionChange, error.normalized) / delta;
         }
 
         return gradients;
