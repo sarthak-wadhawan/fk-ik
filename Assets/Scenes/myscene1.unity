@@ -5495,7 +5495,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 123721c0ef860464580bd4693d621cc6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  joints: []
+  joints:
+  - {fileID: 2047659487}
   linkTransforms: []
 --- !u!1 &2092558397
 GameObject:
