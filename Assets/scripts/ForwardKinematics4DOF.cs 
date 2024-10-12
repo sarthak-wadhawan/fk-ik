@@ -1,0 +1,54 @@
+using System;
+using MathNet.Numerics.LinearAlgebra;
+using MathNet.Numerics.LinearAlgebra.Double;
+
+
+public static Matrix<double> DHTransformation(double theta, double d, double a, double alpha)
+{
+    // Convert angles to radians
+    theta = Math.PI * theta / 180.0;
+    alpha = Math.PI * alpha / 180.0;
+
+    // Create the transformation matrix using DH convention
+    var T = DenseMatrix.OfArray(new double[,]
+    {
+        { Math.Cos(theta), -Math.Sin(theta) * Math.Cos(alpha),  Math.Sin(theta) * Math.Sin(alpha), a * Math.Cos(theta) },
+        { Math.Sin(theta),  Math.Cos(theta) * Math.Cos(alpha), -Math.Cos(theta) * Math.Sin(alpha), a * Math.Sin(theta) },
+        { 0,               Math.Sin(alpha),                   Math.Cos(alpha),                  d                    },
+        { 0,               0,                                  0,                                1                    }
+    });
+
+    return T;
+}
+
+public static Matrix<double> ForwardKinematics(double[] thetas, double[] lengths)
+{
+    // Assuming the following DH parameters:
+    // θ1 -> rotating_block_vertical_arm_joint
+    // θ2 -> vertical_arm_forearm_joint
+    // θ3 -> actuator_forearm_joint
+    // θ4 -> left_gripper/right_gripper joint (end effector)
+    
+    double l1 = lengths[0];  // length of the first link
+    double l2 = lengths[1];  // length of the second link
+    double l3 = lengths[2];  // length of the third link
+    double l4 = lengths[3];  // length of the fourth link (end effector)
+
+    // Extract joint angles (assumed in degrees)
+    double theta1 = thetas[0];  // first joint angle
+    double theta2 = thetas[1];  // second joint angle
+    double theta3 = thetas[2];  // third joint angle
+    double theta4 = thetas[3];  // fourth joint angle (end effector rotation)
+
+    // Define DH parameters for each joint
+    var T1 = DHTransformation(theta1, 0.0, l1, 90.0);  // First transformation
+    var T2 = DHTransformation(theta2, 0.0, l2, 0.0);   // Second transformation
+    var T3 = DHTransformation(theta3, 0.0, l3, 0.0);   // Third transformation
+    var T4 = DHTransformation(theta4, 0.0, l4, 0.0);   // Fourth transformation (end-effector rotation)
+
+    // Chain the transformations
+    var T_final = T1 * T2 * T3 * T4;
+
+    return T_final;
+}
+
