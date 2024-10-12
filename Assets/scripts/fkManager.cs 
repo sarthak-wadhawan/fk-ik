@@ -1,0 +1,152 @@
+using System;
+using MathNet.Numerics.LinearAlgebra;
+using MathNet.Numerics.LinearAlgebra.Double;
+using UnityEngine;
+
+public class ForwardKinematics : MonoBehaviour
+{
+    public Joints jointsScript; // Reference to the Joints script
+    public GameObject target;    // Reference to the target GameObject (e.g., the ball)
+    private float[] linkLengths;
+    private float[] jointAngles;
+
+    private void Start()
+    {
+        // Ensure link lengths are initialized from the Joints script
+        linkLengths = jointsScript.GetLinkLengths();
+    }
+
+    public static Matrix<double> DHTransformation(double theta, double d, double a, double alpha)
+    {
+        // Convert angles to radians
+        theta = Math.PI * theta / 180.0;
+        alpha = Math.PI * alpha / 180.0;
+
+        // Create the transformation matrix using DH convention
+        var T = DenseMatrix.OfArray(new double[,]
+        {
+            { Math.Cos(theta), -Math.Sin(theta) * Math.Cos(alpha),  Math.Sin(theta) * Math.Sin(alpha), a * Math.Cos(theta) },
+            { Math.Sin(theta),  Math.Cos(theta) * Math.Cos(alpha), -Math.Cos(theta) * Math.Sin(alpha), a * Math.Sin(theta) },
+            { 0,               Math.Sin(alpha),                   Math.Cos(alpha),                  d                    },
+            { 0,               0,                                  0,                                1                    }
+        });
+
+        return T;
+    }
+
+    public Matrix<double> ForwardKinematics(double[] angles, double[] lengths)
+    {
+        // Assuming the following DH parameters:
+        // θ1 -> rotating_block_vertical_arm_joint
+        // θ2 -> vertical_arm_forearm_joint
+        // θ3 -> actuator_forearm_joint
+        // θ4 -> left_gripper/right_gripper joint (end effector)
+        
+        double l1 = lengths[0];  // length of the first link
+        double l2 = lengths[1];  // length of the second link
+        double l3 = lengths[2];  // length of the third link
+        double l4 = lengths[3];  // length of the fourth link (end effector)
+
+        // Extract joint angles (assumed in degrees)
+        float theta1 = Mathf.Deg2Rad * angles[0];
+        float theta2 = Mathf.Deg2Rad * angles[1];
+        float theta3 = Mathf.Deg2Rad * angles[2];
+        float theta4 = Mathf.Deg2Rad * angles[3];
+
+        // Define DH parameters for each joint
+        var T1 = DHTransformation(theta1, l1, 0, 90.0);  // First transformation
+        var T2 = DHTransformation(theta2, 0.0, l2, 0.0);   // Second transformation
+        var T3 = DHTransformation(theta3, 0.0, l3, 0.0);   // Third transformation
+        var T4 = DHTransformation(theta4, 0.0, l4, 0.0);   // Fourth transformation (end-effector rotation)
+
+        // Chain the transformations
+        var T_final = T1 * T2 * T3 * T4;
+
+        return T_final;
+    }
+
+    public Vector3 ExtractEndEffectorPosition(Matrix<double> T)
+    {
+        double x = T[0, 3];  // x position
+        double y = T[1, 3];  // y position
+        double z = T[2, 3];  // z position
+
+        return new Vector3((float)x, (float)y, (float)z);
+    }
+
+    // Extract the end effector rotation as a Quaternion from the final transformation matrix
+    public Quaternion ExtractEndEffectorRotation(Matrix<double> T)
+    {
+        // Extract the rotation matrix (3x3 top-left corner)
+        var rotationMatrix = DenseMatrix.OfArray(new double[,]
+        {
+            { T[0, 0], T[0, 1], T[0, 2] },
+            { T[1, 0], T[1, 1], T[1, 2] },
+            { T[2, 0], T[2, 1], T[2, 2] }
+        });
+
+        // Convert the rotation matrix to a Quaternion
+        Quaternion rotation = MatrixToQuaternion(rotationMatrix);
+
+        return rotation;
+    }
+
+    // Helper method to convert a 3x3 rotation matrix to a Quaternion
+    public Quaternion MatrixToQuaternion(Matrix<double> rotationMatrix)
+    {
+        double trace = rotationMatrix[0, 0] + rotationMatrix[1, 1] + rotationMatrix[2, 2];
+
+        double w, x, y, z;
+        if (trace > 0)
+        {
+            double s = 0.5 / Math.Sqrt(trace + 1.0);
+            w = 0.25 / s;
+            x = (rotationMatrix[2, 1] - rotationMatrix[1, 2]) * s;
+            y = (rotationMatrix[0, 2] - rotationMatrix[2, 0]) * s;
+            z = (rotationMatrix[1, 0] - rotationMatrix[0, 1]) * s;
+        }
+        else
+        {
+            if (rotationMatrix[0, 0] > rotationMatrix[1, 1] && rotationMatrix[0, 0] > rotationMatrix[2, 2])
+            {
+                double s = 2.0 * Math.Sqrt(1.0 + rotationMatrix[0, 0] - rotationMatrix[1, 1] - rotationMatrix[2, 2]);
+                w = (rotationMatrix[2, 1] - rotationMatrix[1, 2]) / s;
+                x = 0.25 * s;
+                y = (rotationMatrix[0, 1] + rotationMatrix[1, 0]) / s;
+                z = (rotationMatrix[0, 2] + rotationMatrix[2, 0]) / s;
+            }
+            else if (rotationMatrix[1, 1] > rotationMatrix[2, 2])
+            {
+                double s = 2.0 * Math.Sqrt(1.0 + rotationMatrix[1, 1] - rotationMatrix[0, 0] - rotationMatrix[2, 2]);
+                w = (rotationMatrix[0, 2] - rotationMatrix[2, 0]) / s;
+                x = (rotationMatrix[0, 1] + rotationMatrix[1, 0]) / s;
+                y = 0.25 * s;
+                z = (rotationMatrix[1, 2] + rotationMatrix[2, 1]) / s;
+            }
+            else
+            {
+                double s = 2.0 * Math.Sqrt(1.0 + rotationMatrix[2, 2] - rotationMatrix[0, 0] - rotationMatrix[1, 1]);
+                w = (rotationMatrix[1, 0] - rotationMatrix[0, 1]) / s;
+                x = (rotationMatrix[0, 2] + rotationMatrix[2, 0]) / s;
+                y = (rotationMatrix[1, 2] + rotationMatrix[2, 1]) / s;
+                z = 0.25 * s;
+            }
+        }
+
+        return new Quaternion((float)x, (float)y, (float)z, (float)w);
+    }
+
+    // Use this method to get the target position whenever needed
+    public Vector3 GetTargetPosition()
+    {
+        if (target != null)
+        {
+            return target.transform.position;
+        }
+        else
+        {
+            Debug.LogWarning("Target GameObject is not assigned.");
+            return Vector3.zero; // Return a default value if no target is assigned
+        }
+    }
+}
